@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Прогноз закупки</title>
+    <style>
+        body { font-family: system-ui; max-width: 900px; margin: 40px auto; padding: 20px; background: #f9f9f9; }
+        h1 { color: #333; }
+        .form { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+        label { font-weight: 600; font-size: 14px; }
+        input { padding: 8px; border: 1px solid #ccc; border-radius: 6px; width: 100%; }
+        button { grid-column: span 2; padding: 12px; background: #1976d2; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; }
+        button:hover { background: #1565c0; }
+        .card { background: white; border-radius: 8px; padding: 20px; margin-bottom: 16px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #eee; }
+        .row:last-child { border-bottom: none; }
+        .label { color: #666; }
+        .value { font-weight: 600; }
+        .warning { background: #fff3cd; padding: 10px; border-radius: 6px; margin-top: 8px; }
+        .critical { background: #f8d7da; }
+        .section-title { font-size: 14px; text-transform: uppercase; color: #999; margin-bottom: 8px; }
+    </style>
+</head>
+<body>
+    <h1>📈 Прогноз закупки</h1>
+    <div class="form">
+        <div>
+            <label>SKU</label>
+            <input id="sku" value="OIL-MASS-01">
+        </div>
+        <div>
+            <label>Объект</label>
+            <input id="location" value="WH-01">
+        </div>
+        <div>
+            <label>Горизонт (дней)</label>
+            <input id="horizon" type="number" value="92">
+        </div>
+        <div>
+            <label>Страховой запас (дней)</label>
+            <input id="safety" type="number" value="7">
+        </div>
+        <button onclick="run()">Рассчитать</button>
+    </div>
+    <div id="result"></div>
+
+    <script>
+        async function run() {
+            const res = await fetch('/api/forecast', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    sku: document.getElementById('sku').value,
+                    location_code: document.getElementById('location').value,
+                    horizon_days: +document.getElementById('horizon').value,
+                    safety_stock_days: +document.getElementById('safety').value,
+                })
+            });
+            const d = await res.json();
+            document.getElementById('result').innerHTML = `
+                <div class="card">
+                    <h2>${d.name} <small>(${d.sku})</small></h2>
+                    <div class="row"><span class="label">Объект</span><span class="value">${d.location}</span></div>
+                    <div class="row"><span class="label">Период</span><span class="value">${d.period.from} — ${d.period.to} (${d.period.days} дн.)</span></div>
+                </div>
+                <div class="card">
+                    <div class="section-title">Исходные данные</div>
+                    <div class="row"><span class="label">Средний расход</span><span class="value">${d.avg_daily_consumption} ед./день</span></div>
+                    <div class="row"><span class="label">Текущий остаток</span><span class="value">${d.current_stock} ед.</span></div>
+                    <div class="row"><span class="label">Страховой запас</span><span class="value">${d.safety_stock} ед.</span></div>
+                </div>
+                <div class="card">
+                    <div class="section-title">Расчёт</div>
+                    <div class="row"><span class="label">Прогноз спроса</span><span class="value">${d.forecast_demand} ед.</span></div>
+                    <div class="row"><span class="label">Точка заказа</span><span class="value">${d.reorder_point} ед.</span></div>
+                    <div class="row"><span class="label">Рекомендуемый объём</span><span class="value">${d.recommended_purchase_qty} ед.</span></div>
+                    <div class="row"><span class="label">Стоимость закупки</span><span class="value">${d.estimated_cost} руб.</span></div>
+                </div>
+                <div class="card">
+                    <div class="section-title">Рекомендации</div>
+                    <div class="row"><span class="label">Дата заказа</span><span class="value">${d.recommended_order_date}</span></div>
+                </div>
+                ${d.warnings.length ? `
+                <div class="card">
+                    <div class="section-title">Предупреждения</div>
+                    ${d.warnings.map(w => `<div class="warning ${w.level}">[${w.level.toUpperCase()}] ${w.message}</div>`).join('')}
+                </div>` : ''}
+            `;
+        }
+    </script>
+</body>
+</html>
