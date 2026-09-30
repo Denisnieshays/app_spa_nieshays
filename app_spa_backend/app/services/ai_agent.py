@@ -212,6 +212,11 @@ def _stock_context(db: Session) -> dict:
             stock = calculate_stock(batch_dtos, mv_dtos)
             avg_daily = calculate_avg_daily_consumption(mv_dtos, days=90)
             days = calculate_days_of_stock(stock, avg_daily)
+
+            # ← Собираем ближайший срок годности
+            expiries = [b.expiry_date for b in batches if b.expiry_date]
+            nearest_expiry = min(expiries) if expiries else None
+
             result.append({
                 "sku": p.sku,
                 "name": p.name,
@@ -219,13 +224,12 @@ def _stock_context(db: Session) -> dict:
                 "stock": round(float(stock), 1),
                 "avg_daily": round(float(avg_daily), 2),
                 "days_of_stock": round(float(days), 1) if days else None,
+                "nearest_expiry": str(nearest_expiry) if nearest_expiry else None,
             })
     return {"items": result, "count": len(result)}
 
 
 def _alerts_context(db: Session, filter_type: str | None = None, product: Product | None = None) -> dict:
-    """Собирает алерты. filter_type: 'deficit' | 'expiry' | None.
-    Если product указан — только по нему."""
     today = date.today()
     alerts = []
     locations = db.query(Location).all()
@@ -441,8 +445,8 @@ def _fallback_response(message: str, context: dict) -> str:
             lines.append(f"\n💡 {context.get('hint', '')}")
         return "\n".join(lines)
 
+    # Бюджет
     if "items" in context and "total_cost" in context:
-        # Бюджет
         lines = [f"💰 Бюджет закупок на {context['horizon_days']} дней:\n"]
         for item in context["items"][:15]:
             lines.append(
@@ -453,18 +457,22 @@ def _fallback_response(message: str, context: dict) -> str:
         lines.append(f"📦 Позиций: {context['count']}")
         return "\n".join(lines)
 
+    # Остатки
     if "items" in context:
         lines = [f"📦 На складе {context['count']} позиций:\n"]
         for item in context["items"][:10]:
-            days = f"{item['days_of_stock']:.1f}" if item['days_of_stock'] else "—"
+            days = f"{item['days_of_stock']:.1f}" if item.get('days_of_stock') else "—"
+            expiry = item.get('nearest_expiry') or "—"
             lines.append(
                 f"• {item['sku']} — {item['name']}\n"
-                f"  Остаток: {item['stock']:.0f} ед. | Запас: {days} дн."
+                f"  Остаток: {item['stock']:.0f} ед. | Запас: {days} дн.\n"
+                f"  Ближайший срок годности: {expiry}"
             )
         if context['count'] > 10:
             lines.append(f"\n... и ещё {context['count'] - 10} позиций.")
         return "\n".join(lines)
 
+    # Алерты
     if "alerts" in context:
         if not context["alerts"]:
             return "✅ Предупреждений нет. Все запасы в норме."
@@ -479,7 +487,8 @@ def _fallback_response(message: str, context: dict) -> str:
             if a["type"] == "deficit":
                 lines.append(
                     f"• {a['sku']} — {a['name']}\n"
-                    f"  Запас: {a['days_of_stock']} дн. | Срок поставки: {a['lead_time']} дн."
+                    f"  Запас: {a['days_of_stock']} дн. | Срок поставки: {a['lead_time']} дн.\n"
+                    f"  Остаток: {a['stock']} ед."
                 )
             elif a["type"] == "expiry":
                 lines.append(
@@ -489,6 +498,7 @@ def _fallback_response(message: str, context: dict) -> str:
                 )
         return "\n".join(lines)
 
+    # Прогноз
     if "recommended_quantity" in context:
         return (
             f"📈 Прогноз: {context['name']}\n"
