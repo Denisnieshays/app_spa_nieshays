@@ -107,13 +107,15 @@ recommended_date     = today + days_of_stock
 - Docker 24+ и docker-compose v2
 - Свободные порты: 8000 (API), 5432 (PostgreSQL)
 - (Опционально) API-ключ Yandex AI Studio для LLM
+- Подключиться по ssh при помощи команды ```ssh -L 8000:localhost:8000 user_name@ip_vm```, где **user_name** - имя пользователя, **ip_vm** - ip-адрес виртуальной машины(хоста), чтобы использовать **http://localhost:8000/ui** 
 
 ### Запуск одной командой
 
 ```bash
 cp .env.example .env
 # Отредактируй .env — заполни LLM_API_KEY, LLM_FOLDER_ID
-docker-compose up -d --build
+docker-compose build --no-cache
+docker-compose up -d
 ```
 
 Миграции применяются автоматически при старте контейнера `api`.
@@ -518,7 +520,3 @@ docker-compose down -v        # остановить и удалить данн�
 ```
 
 ---
-
-## Лицензия
-
-MIT
